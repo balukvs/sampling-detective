@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sampling Detective</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Inter:wght@400;600;800&display=swap');
+        
+        body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #0f172a; color: white; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        
+        .typewriter { font-family: 'Courier Prime', monospace; }
+        
+        /* UI Overlays */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        .pointer-events-auto { pointer-events: auto; }
+        
+        /* Terminal screens */
+        .terminal-bg { background: rgba(15, 23, 42, 0.95); border: 2px solid #38bdf8; box-shadow: 0 0 20px rgba(56, 189, 248, 0.3); backdrop-filter: blur(10px); }
+        .terminal-btn { background: #0369a1; border: 1px solid #7dd3fc; transition: all 0.2s; }
+        .terminal-btn:hover { background: #0284c7; box-shadow: 0 0 10px #7dd3fc; transform: translateY(-2px); }
+        .terminal-btn:active { transform: translateY(0); }
+        .terminal-btn:disabled { background: #334155; border-color: #475569; opacity: 0.7; cursor: not-allowed; transform: none; box-shadow: none; }
+        
+        /* Interactive Prompt */
+        .interact-prompt { animation: bounce 1s infinite alternate; }
+        @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-10px); } }
+
+        /* Print styles for field notes */
+        @media print {
+            body * { visibility: hidden; }
+            #print-area, #print-area * { visibility: visible; }
+            #print-area { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: white; color: black; padding: 20px; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- UI Layer -->
+    <div id="ui-layer">
+        
+        <!-- Main Menu -->
+        <div id="screen-home" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center pointer-events-auto z-50">
+            <h1 class="text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 mb-4 tracking-tighter shadow-sm text-center">SAMPLING DETECTIVE</h1>
+            <h2 class="text-2xl text-slate-300 mb-8 typewriter">The Mystery of Missing Data</h2>
+            
+            <div class="bg-slate-800 p-8 rounded-xl max-w-2xl text-slate-300 border border-slate-700 shadow-2xl mb-8">
+                <h3 class="text-xl font-bold text-white mb-3 border-b border-slate-600 pb-2">Case Briefing & Learning Objectives</h3>
+                <p class="mb-3 text-sm">Welcome, Detective. We have three major investigations spanning 1,000 citizens each. Your job is to uncover the truth without analyzing every single record.</p>
+                <ul class="list-disc pl-5 text-sm space-y-1 text-slate-400">
+                    <li>Understand <strong class="text-white">Population vs. Sample</strong>.</li>
+                    <li>Apply <strong class="text-blue-400">Simple Random</strong>, <strong class="text-emerald-400">Systematic</strong>, and <strong class="text-purple-400">Stratified</strong> sampling.</li>
+                    <li>Identify and avoid <strong class="text-red-400">Sampling Bias</strong>.</li>
+                    <li>Observe how <strong class="text-amber-400">Sample Size</strong> affects Sampling Error.</li>
+                </ul>
+            </div>
+            
+            <button onclick="startGame()" class="px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold rounded-lg shadow-[0_0_15px_rgba(59,130,246,0.5)] transition-all transform hover:scale-105 text-lg">
+                START INVESTIGATION
+            </button>
+        </div>
+
+        <!-- HUD -->
+        <div id="screen-hud" class="hidden w-full h-full relative">
+            <div class="absolute top-4 left-4 bg-slate-900/80 p-4 rounded-lg border border-slate-700 backdrop-blur-md">
+                <div class="text-xs text-slate-400 uppercase tracking-widest mb-1">Current Investigation</div>
+                <div id="hud-case" class="text-lg font-bold text-blue-400">Case 1: The Traffic Crisis</div>
+                <div class="text-xs text-slate-400 uppercase tracking-widest mt-3 mb-1">Mission Objective</div>
+                <div id="hud-mission" class="text-sm font-semibold text-white">Talk to the Police Chief.</div>
+            </div>
+            
+            <div class="absolute top-4 right-4 bg-slate-900/80 p-4 rounded-lg border border-slate-700 flex gap-6 text-center backdrop-blur-md">
+                <div>
+                    <div class="text-xs text-slate-400 uppercase">Score</div>
+                    <div id="hud-score" class="text-xl font-bold text-amber-400">0</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-400 uppercase">Time</div>
+                    <div id="hud-time" class="text-xl font-bold text-white typewriter">00:00</div>
+                </div>
+            </div>
+
+            <!-- Interaction Prompt -->
+            <div id="interact-prompt" class="hidden absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-amber-500 text-black px-6 py-2 rounded-full font-bold shadow-lg interact-prompt text-lg border-2 border-amber-300">
+                Press [E] to Interact
+            </div>
+            
+            <div class="absolute bottom-4 left-4 text-xs text-slate-500">
+                WASD / Arrows to Move
+            </div>
+        </div>
+
+        <!-- Dialog Box -->
+        <div id="dialog-box" class="hidden absolute bottom-10 left-1/2 transform -translate-x-1/2 w-full max-w-3xl bg-slate-900/95 border-2 border-blue-500 rounded-xl p-6 shadow-2xl pointer-events-auto">
+            <div class="flex gap-4">
+                <div class="w-16 h-16 bg-slate-800 rounded-full border border-slate-600 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                    <div class="text-3xl">👮‍♂️</div>
+                </div>
+                <div class="flex-1">
+                    <div class="font-bold text-blue-400 mb-1">Police Chief</div>
+                    <div id="dialog-text" class="text-white text-lg typewriter leading-relaxed min-h-[60px]">...</div>
+                    <div class="mt-4 flex justify-end">
+                        <button onclick="nextDialog()" class="terminal-btn px-6 py-2 rounded font-bold text-sm">Next [Space]</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Investigation Terminal (Mini-Game UI) -->
+        <div id="terminal-screen" class="hidden absolute inset-0 bg-slate-900/80 flex items-center justify-center pointer-events-auto z-40 backdrop-blur-sm">
+            <div class="terminal-bg w-full max-w-5xl rounded-xl p-8 flex flex-col max-h-[90vh]">
+                <div class="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
+                    <h2 id="terminal-title" class="text-2xl font-bold text-blue-400 typewriter">TERMINAL ACCESS</h2>
+                    <button onclick="closeTerminal()" class="text-slate-400 hover:text-white">✕ Close</button>
+                </div>
+                
+                <div id="terminal-content" class="flex-1 overflow-y-auto pr-4">
+                    <!-- Content injected by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- End Case / Field Notes Screen -->
+        <div id="screen-end" class="hidden absolute inset-0 bg-slate-900 flex flex-col items-center justify-center pointer-events-auto z-50 p-8 overflow-y-auto">
+            <div id="print-area" class="w-full max-w-4xl bg-white text-slate-900 p-8 rounded-xl shadow-2xl">
+                <div class="text-center mb-6">
+                    <h1 class="text-4xl font-extrabold text-slate-800 mb-2">OFFICIAL DETECTIVE REPORT</h1>
+                    <h2 id="report-case-title" class="text-xl text-slate-600">Case Concluded</h2>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-8 mb-8 border-t border-b border-slate-300 py-6">
+                    <div>
+                        <h3 class="font-bold text-slate-500 uppercase text-xs mb-1">Final Score</h3>
+                        <div id="report-score" class="text-3xl font-black text-blue-600">0 / 1000</div>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-slate-500 uppercase text-xs mb-1">Time Elapsed</h3>
+                        <div id="report-time" class="text-3xl font-black text-slate-700">00:00</div>
+                    </div>
+                </div>
+
+                <div class="mb-8">
+                    <h3 class="font-bold text-lg border-b border-slate-300 pb-2 mb-4">Detective's Field Notes (Evidence of Learning)</h3>
+                    <p class="text-sm text-slate-500 mb-2 no-print">Instructions: Have a peer playtest this case. Record their feedback and what they learned about sampling below to earn your playtest marks.</p>
+                    <textarea id="field-notes" class="w-full h-40 p-4 border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-serif" placeholder="e.g., 'Playtester John noted that stratified sampling provided a much lower error than simple random sampling. He understood bias perfectly after Level 4...'"></textarea>
+                </div>
+                
+                <div class="flex justify-between items-center no-print">
+                    <button onclick="window.print()" class="px-6 py-3 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded transition">
+                        🖨️ Print Final Report (PDF)
+                    </button>
+                    <button id="next-case-btn" onclick="startNextCase()" class="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded shadow-lg transition">
+                        Proceed to Next Case ➔
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        /**
+         * GAME DATA & STATE
+         */
+        const CASES = [
+            {
+                title: "Case 1: The Traffic Crisis",
+                targetMetric: "TravelTime",
+                metricLabel: "Daily Travel Time (mins)",
+                populationMean: 0, // Calculated dynamically
+                theme: 'traffic'
+            },
+            {
+                title: "Case 2: The Economic Divide",
+                targetMetric: "Income",
+                metricLabel: "Monthly Income ($)",
+                populationMean: 0,
+                theme: 'economy'
+            },
+            {
+                title: "Case 3: Citizen Happiness",
+                targetMetric: "Happiness",
+                metricLabel: "Satisfaction Score (1-100)",
+                populationMean: 0,
+                theme: 'happiness'
+            }
+        ];
+
+        const GAME = {
+            playing: false,
+            currentCaseIndex: 0,
+            level: 1,
+            timeElapsed: 0,
+            score: 0,
+            timerInterval: null,
+            dialogOpen: false,
+            terminalOpen: false,
+            population: [], // 1000 records
+            currentDialog: [],
+            dialogIndex: 0,
+            canMove: true,
+            completedLevels: [false, false, false, false, false]
+        };
+
+        const UI = {
+            home: document.getElementById('screen-home'),
+            hud: document.getElementById('screen-hud'),
+            end: document.getElementById('screen-end'),
+            mission: document.getElementById('hud-mission'),
+            score: document.getElementById('hud-score'),
+            time: document.getElementById('hud-time'),
+            caseTitle: document.getElementById('hud-case'),
+            prompt: document.getElementById('interact-prompt'),
+            dialog: document.getElementById('dialog-box'),
+            dialogText: document.getElementById('dialog-text'),
+            terminal: document.getElementById('terminal-screen'),
+            terminalTitle: document.getElementById('terminal-title'),
+            terminalContent: document.getElementById('terminal-content')
+        };
+
+        // --- Data Generation ---
+        // Uses a basic pseudo-random generator for reproducibility
+        let seed = 12345;
+        function random() {
+            let x = Math.sin(seed++) * 10000;
+            return x - Math.floor(x);
+        }
+
+        function generateDataset() {
+            GAME.population = [];
+            let totalVal = 0;
+            const currentCase = CASES[GAME.currentCaseIndex];
+            seed = 1000 + GAME.currentCaseIndex; // Different dataset per case
+
+            for (let i = 0; i < 1000; i++) {
+                const zone = random() < 0.4 ? 'North' : (random() < 0.7 ? 'South' : 'East');
+                const hasCar = random() < (zone === 'North' ? 0.8 : 0.3); // Bias generator
+                
+                let val = 0;
+                if (currentCase.targetMetric === "TravelTime") {
+                    val = Math.floor(20 + random() * 40 + (zone === 'South' ? 30 : 0) - (hasCar ? 15 : 0));
+                } else if (currentCase.targetMetric === "Income") {
+                    val = Math.floor(2000 + random() * 3000 + (zone === 'North' ? 4000 : 0));
+                } else {
+                    val = Math.floor(30 + random() * 40 + (hasCar ? 15 : 0) + (zone === 'East' ? 10 : -10));
+                }
+                
+                val = Math.max(10, val); // clamp
+
+                GAME.population.push({
+                    id: String(i).padStart(4, '0'),
+                    age: Math.floor(18 + random() * 60),
+                    zone: zone,
+                    hasCar: hasCar,
+                    [currentCase.targetMetric]: val
+                });
+                totalVal += val;
+            }
+            CASES[GAME.currentCaseIndex].populationMean = totalVal / 1000;
+        }
+
+        // --- Core Functions ---
+        function formatTime(sec) {
+            return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+        }
+
+        function addScore(points) {
+            GAME.score += points;
+            UI.score.innerText = GAME.score;
+            // Pop effect
+            UI.score.style.transform = "scale(1.5)";
+            UI.score.style.color = "#4ade80";
+            setTimeout(() => {
+                UI.score.style.transform = "scale(1)";
+                UI.score.style.color = "#fbbf24";
+            }, 300);
+        }
+
+        function startGame() {
+            UI.home.classList.add('hidden');
+            UI.hud.classList.remove('hidden');
+            
+            init3DWorld(); // Start engine
+            startCase(0); // Start first case
+        }
+
+        function startCase(index) {
+            GAME.currentCaseIndex = index;
+            GAME.level = 1;
+            GAME.completedLevels = [false, false, false, false, false];
+            UI.caseTitle.innerText = CASES[index].title;
+            generateDataset();
+            
+            applyCaseTheme(index);
+            
+            // Reset player
+            if (playerGroup) {
+                playerGroup.position.set(0, 0, 10);
+                playerGroup.rotation.y = 0;
+            }
+
+            GAME.playing = true;
+            if (!GAME.timerInterval) {
+                GAME.timerInterval = setInterval(() => {
+                    if (GAME.playing && !GAME.dialogOpen && !GAME.terminalOpen) {
+                        GAME.timeElapsed++;
+                        UI.time.innerText = formatTime(GAME.timeElapsed);
+                    }
+                }, 1000);
+            }
+
+            loadLevel(1);
+        }
+
+        function startNextCase() {
+            UI.end.classList.add('hidden');
+            if (GAME.currentCaseIndex < CASES.length - 1) {
+                document.getElementById('field-notes').value = ""; // Clear notes
+                startCase(GAME.currentCaseIndex + 1);
+            } else {
+                location.reload(); // Game fully complete
+            }
+        }
+
+        function finishCase() {
+            GAME.playing = false;
+            UI.hud.classList.add('hidden');
+            UI.end.classList.remove('hidden');
+            
+            document.getElementById('report-case-title').innerText = CASES[GAME.currentCaseIndex].title + " - Concluded";
+            document.getElementById('report-score').innerText = GAME.score;
+            document.getElementById('report-time').innerText = formatTime(GAME.timeElapsed);
+            
+            const nextBtn = document.getElementById('next-case-btn');
+            if (GAME.currentCaseIndex === CASES.length - 1) {
+                nextBtn.innerText = "Finish Game / Restart";
+            }
+        }
+
+        function setMission(text) { UI.mission.innerText = text; }
+
+        // --- Dialog System ---
+        function openDialog(texts, onComplete = null) {
+            GAME.dialogOpen = true;
+            GAME.canMove = false;
+            GAME.currentDialog = texts;
+            GAME.dialogIndex = 0;
+            UI.dialog.classList.remove('hidden');
+            UI.dialogText.innerText = texts[0];
+            GAME.onDialogComplete = onComplete;
+        }
+
+        function nextDialog() {
+            GAME.dialogIndex++;
+            if (GAME.dialogIndex < GAME.currentDialog.length) {
+                UI.dialogText.innerText = GAME.currentDialog[GAME.dialogIndex];
+            } else {
+                UI.dialog.classList.add('hidden');
+                GAME.dialogOpen = false;
+                GAME.canMove = true;
+                if (GAME.onDialogComplete) GAME.onDialogComplete();
+            }
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && GAME.dialogOpen) nextDialog();
+            if (e.code === 'KeyE' && activeInteractable && !GAME.dialogOpen && !GAME.terminalOpen) {
+                handleInteraction(activeInteractable);
+            }
+        });
+
+        // --- Terminal Content Builders ---
+        function openTerminal(title, contentHTML) {
+            GAME.terminalOpen = true;
+            GAME.canMove = false;
+            UI.terminal.classList.remove('hidden');
+            UI.terminalTitle.innerText = title;
+            UI.terminalContent.innerHTML = contentHTML;
+        }
+
+        function closeTerminal() {
+            GAME.terminalOpen = false;
+            GAME.canMove = true;
+            UI.terminal.classList.add('hidden');
+            if (window.currentChart) {
+                window.currentChart.destroy();
+                window.currentChart = null;
+            }
+        }
+
+        function loadLevel(level) {
+            GAME.level = level;
+            const m = CASES[GAME.currentCaseIndex].metricLabel;
+            switch(level) {
+                case 1:
+                    setMission("Find the Chief to get your briefing.");
+                    break;
+                case 2:
+                    setMission("Find the blue Random Terminal to analyze 1,000 records.");
+                    break;
+                case 3:
+                    setMission("Find the green Advanced Terminal to test Systematic/Stratified sampling.");
+                    break;
+                case 4:
+                    setMission("Find the red warning Terminal. We suspect Biased data.");
+                    break;
+                case 5:
+                    setMission("Find the gold Mainframe to solve the case!");
+                    break;
+            }
+
+            // Move the guiding marker to the correct target
+            if (window.activeMarker && interactables) {
+                let targetTerminal = null;
+                if(level === 1) targetTerminal = interactables.find(i => i.type === 'chief');
+                if(level === 2) targetTerminal = interactables.find(i => i.type === 'terminal_random');
+                if(level === 3) targetTerminal = interactables.find(i => i.type === 'terminal_advanced');
+                if(level === 4) targetTerminal = interactables.find(i => i.type === 'terminal_bias');
+                if(level === 5) targetTerminal = interactables.find(i => i.type === 'terminal_final');
+                
+                if(targetTerminal) {
+                    window.activeMarker.position.set(
+                        targetTerminal.mesh.position.x, 
+                        4, 
+                        targetTerminal.mesh.position.z
+                    );
+                    window.activeMarker.visible = true;
+                } else {
+                    window.activeMarker.visible = false;
+                }
+            }
+        }
+
+        function handleInteraction(objData) {
+            const level = GAME.level;
+            const currentCase = CASES[GAME.currentCaseIndex];
+            const mLabel = currentCase.metricLabel;
+
+            if (objData.type === 'chief') {
+                if (level === 1) {
+                    let dialogTexts = [];
+                    if (GAME.currentCaseIndex === 0) {
+                        dialogTexts = [
+                            `Detective! We have a crisis regarding ${currentCase.title}.`,
+                            "The database contains exactly 1,000 citizen records. This is our POPULATION.",
+                            "We don't have time to analyze everyone. We need to select a smaller group, a SAMPLE.",
+                            "Follow the yellow floating marker to the Blue Terminal to begin."
+                        ];
+                    } else if (GAME.currentCaseIndex === 1) {
+                        dialogTexts = [
+                            `Welcome back, Detective! Now we're tackling ${currentCase.title}.`,
+                            "The Mayor needs to know the average income, but analyzing 1,000 people still takes too long.",
+                            "Follow the yellow marker to the Blue Terminal to practice Random Sampling on this new data."
+                        ];
+                    } else {
+                        dialogTexts = [
+                            `Final case, Detective: ${currentCase.title}.`,
+                            "We need to measure overall citizen satisfaction in the city.",
+                            "You know the drill. Follow the marker to the Blue Terminal first, then Green, Red, and finally the Gold Mainframe!"
+                        ];
+                    }
+
+                    openDialog(dialogTexts, () => {
+                        GAME.completedLevels[0] = true;
+                        loadLevel(2);
+                        addScore(50);
+                    });
+                } else {
+                    openDialog(["Keep investigating those terminals, Detective. Follow the yellow marker!"]);
+                }
+            } 
+            else if (objData.type === 'terminal_random') {
+                if (level < 2) return openDialog(["Access Denied. See Chief first."]);
+                
+                openTerminal("LEVEL 2: SIMPLE RANDOM SAMPLING", `
+                    <div class="space-y-4 text-slate-300">
+                        <p>Population size (N): 1,000</p>
+                        <p>Population Mean (μ): <strong class="text-white">${currentCase.populationMean.toFixed(2)}</strong></p>
+                        <p>Select a sample size (n) to randomly pick citizens from the database.</p>
+                        <div class="flex gap-4 my-4">
+                            <button class="terminal-btn px-4 py-2 rounded text-white font-bold" onclick="runRandomSample(10)">Sample 10</button>
+                            <button class="terminal-btn px-4 py-2 rounded text-white font-bold" onclick="runRandomSample(50)">Sample 50</button>
+                            <button class="terminal-btn px-4 py-2 rounded text-white font-bold" onclick="runRandomSample(200)">Sample 200</button>
+                        </div>
+                        <div id="sample-results" class="hidden bg-slate-800 p-4 rounded border border-slate-600">
+                            <h3 class="font-bold text-blue-400 mb-2">Analysis Results</h3>
+                            <p>Sample Mean (x̄): <span id="s-mean" class="font-bold text-white"></span></p>
+                            <p>Absolute Error (|x̄ - μ|): <span id="s-error" class="font-bold text-amber-400"></span></p>
+                            <p class="mt-2 text-sm text-emerald-400" id="s-feedback"></p>
+                            <button class="terminal-btn mt-4 px-4 py-2 rounded text-white font-bold w-full" onclick="completeLevel(2)">Submit Finding & Proceed</button>
+                        </div>
+                        <div class="h-48 w-full relative"><canvas id="chart-l2"></canvas></div>
+                    </div>
+                `);
+            }
+            else if (objData.type === 'terminal_advanced') {
+                if (level < 3) return openDialog(["Access Denied. Complete previous levels."]);
+                
+                openTerminal("LEVEL 3: SYSTEMATIC & STRATIFIED", `
+                    <div class="space-y-4 text-slate-300">
+                        <p>Random isn't the only way. Try these structured methods for n=50.</p>
+                        <div class="flex gap-4 my-4">
+                            <button class="terminal-btn px-4 py-2 rounded text-white font-bold flex-1" onclick="runSystematic(50)">Run Systematic (Every kth)</button>
+                            <button class="terminal-btn px-4 py-2 rounded text-white font-bold flex-1" onclick="runStratified(50)">Run Stratified (By Zone)</button>
+                        </div>
+                        <div id="sample-results-3" class="hidden bg-slate-800 p-4 rounded border border-slate-600">
+                            <p>Sample Mean (x̄): <span id="s-mean-3" class="font-bold text-white"></span></p>
+                            <p>Absolute Error: <span id="s-error-3" class="font-bold text-amber-400"></span></p>
+                            <p class="mt-2 text-sm italic" id="s-desc-3"></p>
+                            <button class="terminal-btn mt-4 px-4 py-2 rounded text-white font-bold w-full" onclick="completeLevel(3)">Submit Finding & Proceed</button>
+                        </div>
+                    </div>
+                `);
+            }
+            else if (objData.type === 'terminal_bias') {
+                if (level < 4) return openDialog(["Access Denied. Complete previous levels."]);
+                
+                openTerminal("LEVEL 4: SAMPLING BIAS", `
+                    <div class="space-y-4 text-slate-300">
+                        <div class="bg-red-900/30 border border-red-500 p-4 rounded text-red-200">
+                            <h3 class="font-bold text-red-400">WARNING: SUSPICIOUS DATA</h3>
+                            <p>The Mayor ran a survey of 300 citizens, but the average is way off. He only surveyed people who own cars.</p>
+                        </div>
+                        <button class="terminal-btn bg-red-700 hover:bg-red-600 px-4 py-2 rounded text-white font-bold my-4" onclick="runBiasedSample(300)">Analyze Mayor's Sample (n=300)</button>
+                        
+                        <div id="sample-results-4" class="hidden bg-slate-800 p-4 rounded border border-slate-600">
+                            <p>Sample Mean (x̄): <span id="s-mean-4" class="font-bold text-white"></span> (Pop μ: ${currentCase.populationMean.toFixed(2)})</p>
+                            <p>Absolute Error: <span id="s-error-4" class="font-bold text-red-400"></span></p>
+                            <p class="mt-2 text-sm">Conclusion: Even a large sample size (300) cannot fix a biased sampling frame!</p>
+                            <button class="terminal-btn mt-4 px-4 py-2 rounded text-white font-bold w-full" onclick="completeLevel(4)">Understood Bias - Proceed</button>
+                        </div>
+                    </div>
+                `);
+            }
+            else if (objData.type === 'terminal_final') {
+                if (level < 5) return openDialog(["Access Denied. Complete previous levels."]);
+                
+                openTerminal("LEVEL 5: FINAL INVESTIGATION", `
+                    <div class="space-y-4 text-slate-300">
+                        <h2 class="text-xl font-bold text-white border-b border-slate-600 pb-2">Solve: ${currentCase.title}</h2>
+                        <p>Select your final method and size to estimate the population mean. Your score depends on low error.</p>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm mb-1">Method</label>
+                                <select id="final-method" class="w-full bg-slate-800 border border-slate-600 p-2 rounded text-white">
+                                    <option value="random">Simple Random</option>
+                                    <option value="stratified">Stratified (By Zone)</option>
+                                    <option value="biased">Convenience (Car Owners)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm mb-1">Sample Size (n)</label>
+                                <select id="final-size" class="w-full bg-slate-800 border border-slate-600 p-2 rounded text-white">
+                                    <option value="20">20</option>
+                                    <option value="100">100</option>
+                                    <option value="400">400</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <button class="terminal-btn px-4 py-4 rounded text-white font-bold w-full mt-4 text-lg bg-emerald-700 hover:bg-emerald-600" onclick="runFinalInvestigation()">SUBMIT FINAL ANALYSIS</button>
+                        
+                        <div id="sample-results-5" class="hidden bg-slate-800 p-4 rounded border border-slate-600 mt-4">
+                            <p class="text-lg">Actual Population Mean: <span class="font-bold text-blue-400">${currentCase.populationMean.toFixed(2)}</span></p>
+                            <p class="text-lg">Your Estimated Mean: <span id="s-mean-5" class="font-bold text-emerald-400"></span></p>
+                            <p>Error: <span id="s-error-5" class="font-bold text-amber-400"></span></p>
+                            <div class="text-center mt-6">
+                                <p id="final-points" class="text-2xl font-bold text-amber-400 mb-4"></p>
+                                <button class="terminal-btn px-8 py-3 rounded text-white font-bold" onclick="finishCase()">Conclude Case</button>
+                            </div>
+                        </div>
+                    </div>
+                `);
+            }
+        }
+
+        // --- Sampling Algorithms & Logic ---
+        function runRandomSample(n) {
+            let sample = [...GAME.population].sort(() => 0.5 - Math.random()).slice(0, n);
+            displayResults(sample, 2, `Notice how error generally decreases as sample size increases.`);
+        }
+
+        function runSystematic(n) {
+            let sample = [];
+            let k = Math.floor(1000 / n);
+            let start = Math.floor(Math.random() * k);
+            for(let i = start; i < 1000 && sample.length < n; i += k) {
+                sample.push(GAME.population[i]);
+            }
+            displayResults(sample, 3, "Selected every kth record. Good spread across the database.");
+        }
+
+        function runStratified(n) {
+            // Strata: North, South, East
+            let north = GAME.population.filter(p => p.zone === 'North');
+            let south = GAME.population.filter(p => p.zone === 'South');
+            let east = GAME.population.filter(p => p.zone === 'East');
+            
+            // Proportional allocation
+            let nN = Math.round(n * (north.length / 1000));
+            let nS = Math.round(n * (south.length / 1000));
+            let nE = n - nN - nS; // Remainder
+            
+            let sample = [
+                ...north.sort(() => 0.5 - Math.random()).slice(0, nN),
+                ...south.sort(() => 0.5 - Math.random()).slice(0, nS),
+                ...east.sort(() => 0.5 - Math.random()).slice(0, nE)
+            ];
+            displayResults(sample, 3, "Ensured proportional representation from every city zone.");
+        }
+
+        function runBiasedSample(n) {
+            let biasedPop = GAME.population.filter(p => p.hasCar);
+            let sample = [...biasedPop].sort(() => 0.5 - Math.random()).slice(0, Math.min(n, biasedPop.length));
+            displayResults(sample, 4, "");
+        }
+
+        function runFinalInvestigation() {
+            const method = document.getElementById('final-method').value;
+            const size = parseInt(document.getElementById('final-size').value);
+            
+            let sample = [];
+            if(method === 'random') sample = [...GAME.population].sort(() => 0.5 - Math.random()).slice(0, size);
+            else if(method === 'stratified') {
+                let north = GAME.population.filter(p => p.zone === 'North');
+                let south = GAME.population.filter(p => p.zone === 'South');
+                let east = GAME.population.filter(p => p.zone === 'East');
+                let nN = Math.round(size * (north.length / 1000));
+                let nS = Math.round(size * (south.length / 1000));
+                let nE = size - nN - nS;
+                sample = [
+                    ...north.sort(() => 0.5 - Math.random()).slice(0, nN),
+                    ...south.sort(() => 0.5 - Math.random()).slice(0, nS),
+                    ...east.sort(() => 0.5 - Math.random()).slice(0, nE)
+                ];
+            } else if (method === 'biased') {
+                let biasedPop = GAME.population.filter(p => p.hasCar);
+                sample = [...biasedPop].sort(() => 0.5 - Math.random()).slice(0, Math.min(size, biasedPop.length));
+            }
+
+            const metric = CASES[GAME.currentCaseIndex].targetMetric;
+            const popMean = CASES[GAME.currentCaseIndex].populationMean;
+            let sum = sample.reduce((acc, curr) => acc + curr[metric], 0);
+            let sMean = sum / sample.length;
+            let error = Math.abs(sMean - popMean);
+
+            document.getElementById(`sample-results-5`).classList.remove('hidden');
+            document.getElementById(`s-mean-5`).innerText = sMean.toFixed(2);
+            document.getElementById(`s-error-5`).innerText = error.toFixed(2);
+
+            // Calculate Score
+            let points = 200;
+            if (method === 'biased') points -= 150;
+            if (size === 20) points -= 50;
+            if (error < 1.0) points += 50;
+            points = Math.max(0, points); // No negative points
+            
+            if(!GAME.completedLevels[4]) {
+                addScore(points);
+                GAME.completedLevels[4] = true;
+            }
+            document.getElementById('final-points').innerText = `+${points} Detective Points`;
+        }
+
+        function displayResults(sample, level, feedback) {
+            const metric = CASES[GAME.currentCaseIndex].targetMetric;
+            const popMean = CASES[GAME.currentCaseIndex].populationMean;
+            let sum = sample.reduce((acc, curr) => acc + curr[metric], 0);
+            let sMean = sum / sample.length;
+            let error = Math.abs(sMean - popMean);
+
+            document.getElementById(`sample-results${level===2?'':'-'+level}`).classList.remove('hidden');
+            document.getElementById(`s-mean${level===2?'':'-'+level}`).innerText = sMean.toFixed(2);
+            document.getElementById(`s-error${level===2?'':'-'+level}`).innerText = error.toFixed(2);
+            if(level===2) document.getElementById(`s-feedback`).innerText = feedback;
+            if(level===3) document.getElementById(`s-desc-3`).innerText = feedback;
+
+            // Draw Chart for Level 2
+            if (level === 2) {
+                if (window.currentChart) window.currentChart.destroy();
+                const ctx = document.getElementById('chart-l2').getContext('2d');
+                window.currentChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Population Mean (μ)', 'Sample Mean (x̄)'],
+                        datasets: [{
+                            label: CASES[GAME.currentCaseIndex].metricLabel,
+                            data: [popMean, sMean],
+                            backgroundColor: ['rgba(59, 130, 246, 0.7)', 'rgba(16, 185, 129, 0.7)'],
+                            borderColor: ['rgb(59, 130, 246)', 'rgb(16, 185, 129)'],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } }
+                });
+            }
+        }
+
+        function completeLevel(l) {
+            closeTerminal();
+            if (!GAME.completedLevels[l-1]) {
+                GAME.completedLevels[l-1] = true;
+                addScore(100);
+                loadLevel(l+1);
+            }
+        }
+
+        /**
+         * THREE.JS 3D ENGINE & MOVEMENT
+         */
+        let scene, camera, renderer, playerGroup;
+        let interactables = [];
+        let activeInteractable = null;
+        let keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false };
+        let clock = new THREE.Clock();
+
+        // Animation state for character
+        let playerLegL, playerLegR, playerArmL, playerArmR;
+        let walkTime = 0;
+
+        window.envRefs = {}; // Store material references for dynamic theming
+
+        function init3DWorld() {
+            if (scene) return; // Prevent double init
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f172a);
+            scene.fog = new THREE.FogExp2(0x0f172a, 0.015);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: true, powerPreference: "high-performance" });
+            renderer.setPixelRatio(window.devicePixelRatio); // ENHANCED SCREEN QUALITY
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
+            
+            // Cinematic Rendering
+            renderer.toneMapping = THREE.ACESFilmicToneMapping; 
+            renderer.toneMappingExposure = 1.2;
+            renderer.outputEncoding = THREE.sRGBEncoding;
+
+            // Lights
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x0f172a, 0.6);
+            scene.add(hemiLight);
+            
+            const ambient = new THREE.AmbientLight(0x475569, 0.4); 
+            scene.add(ambient);
+            
+            const dirLight = new THREE.DirectionalLight(0xfffaee, 1.2);
+            dirLight.position.set(20, 50, 20);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 4096; // ENHANCED SHADOW QUALITY
+            dirLight.shadow.mapSize.height = 4096;
+            scene.add(dirLight);
+
+            // Textures (Procedural generation for simple patterns)
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const context = canvas.getContext('2d');
+            context.fillStyle = '#1e293b'; context.fillRect(0, 0, 256, 256);
+            context.strokeStyle = '#334155'; context.lineWidth = 2;
+            context.strokeRect(0, 0, 256, 256);
+            const floorTex = new THREE.CanvasTexture(canvas);
+            floorTex.wrapS = THREE.RepeatWrapping; floorTex.wrapT = THREE.RepeatWrapping;
+            floorTex.repeat.set(20, 20);
+            floorTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+            // Floor
+            const floorGeo = new THREE.PlaneGeometry(150, 150);
+            const floorMat = new THREE.MeshStandardMaterial({ 
+                map: floorTex, roughness: 0.1, metalness: 0.3, color: 0x8899aa
+            });
+            window.envRefs.floorMat = floorMat;
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            // Particles
+            const particlesGeo = new THREE.BufferGeometry();
+            const particlesCount = 500;
+            const posArray = new Float32Array(particlesCount * 3);
+            for(let i = 0; i < particlesCount * 3; i++) {
+                posArray[i] = (Math.random() - 0.5) * 100;
+            }
+            particlesGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+            const particlesMat = new THREE.PointsMaterial({
+                size: 0.05, color: 0xbae6fd, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false
+            });
+            window.envRefs.particlesMat = particlesMat;
+            const dust = new THREE.Points(particlesGeo, particlesMat);
+            scene.add(dust);
+            window.dustParticles = dust;
+
+            // --- Dynamic Case Props Setup ---
+            const case1Props = new THREE.Group();
+            const case2Props = new THREE.Group();
+            const case3Props = new THREE.Group();
+            window.envRefs.case1Props = case1Props;
+            window.envRefs.case2Props = case2Props;
+            window.envRefs.case3Props = case3Props;
+            scene.add(case1Props); scene.add(case2Props); scene.add(case3Props);
+
+            // Case 1: Cones
+            const coneGeo = new THREE.ConeGeometry(0.6, 1.5, 16);
+            const coneMat = new THREE.MeshStandardMaterial({ color: 0xff5500, roughness: 0.6 });
+            for(let i=0; i<15; i++) {
+                const cone = new THREE.Mesh(coneGeo, coneMat);
+                cone.position.set((Math.random()-0.5)*60, 0.75, (Math.random()-0.5)*50 - 5);
+                cone.castShadow = true; case1Props.add(cone);
+            }
+            // Case 2: Pillars & Gold
+            const pillarGeo = new THREE.CylinderGeometry(1.5, 1.5, 15, 32);
+            const pillarMat = new THREE.MeshStandardMaterial({ color: 0xfff5e6, roughness: 0.1, metalness: 0.2 });
+            const goldMat = new THREE.MeshStandardMaterial({ color: 0xffd700, roughness: 0.2, metalness: 1.0 });
+            const goldGeo = new THREE.BoxGeometry(2, 0.5, 1);
+            for(let i=0; i<8; i++) {
+                const p = new THREE.Mesh(pillarGeo, pillarMat);
+                p.position.set(-30 + (i%4)*20, 7.5, i<4?-25:25); p.castShadow = true; case2Props.add(p);
+                for(let j=0; j<3; j++) {
+                    const g = new THREE.Mesh(goldGeo, goldMat);
+                    g.position.set(-15+Math.random()*30, 0.25+j*0.5, -15+Math.random()*15);
+                    g.rotation.y = Math.random(); g.castShadow = true; case2Props.add(g);
+                }
+            }
+            // Case 3: Trees
+            const trunkGeo = new THREE.CylinderGeometry(0.4, 0.6, 4, 8);
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
+            const leavesGeo = new THREE.IcosahedronGeometry(2.5, 0);
+            const leavesMat = new THREE.MeshStandardMaterial({ color: 0x228b22, roughness: 0.8, flatShading: true });
+            for(let i=0; i<14; i++) {
+                const tree = new THREE.Group();
+                const trunk = new THREE.Mesh(trunkGeo, trunkMat); trunk.position.y = 2; trunk.castShadow = true;
+                const leaves = new THREE.Mesh(leavesGeo, leavesMat); leaves.position.y = 5; leaves.castShadow = true;
+                tree.add(trunk); tree.add(leaves);
+                tree.position.set((Math.random()-0.5)*65, 0, (Math.random()-0.5)*50 - 5);
+                case3Props.add(tree);
+            }
+
+            // Character Builder Helper
+            function buildCharacter(colorShirt, colorPants, isChief) {
+                const group = new THREE.Group();
+                const skinMat = new THREE.MeshStandardMaterial({ color: 0xffdcb1, roughness: 0.5 });
+                const shirtMat = new THREE.MeshStandardMaterial({ color: colorShirt, roughness: 0.8 });
+                const pantsMat = new THREE.MeshStandardMaterial({ color: colorPants, roughness: 0.8 });
+                const darkMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+
+                // Body (Cylinder)
+                const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.2, 16), shirtMat);
+                torso.position.y = 1.6; torso.castShadow = true; group.add(torso);
+                
+                // Head (Sphere)
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16), skinMat);
+                head.position.y = 2.45; head.castShadow = true; group.add(head);
+
+                // Hat/Hair
+                if(isChief) {
+                    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.38, 0.2, 16), new THREE.MeshStandardMaterial({color: 0x1e3a8a}));
+                    cap.position.y = 2.75; group.add(cap);
+                    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.05, 16), darkMat);
+                    brim.position.y = 2.65; brim.position.z = 0.1; group.add(brim);
+                } else {
+                    // Fedora
+                    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.05, 16), shirtMat);
+                    brim.position.y = 2.65; group.add(brim);
+                    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.3, 16), shirtMat);
+                    top.position.y = 2.8; group.add(top);
+                    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.41, 0.41, 0.1, 16), darkMat);
+                    band.position.y = 2.7; group.add(band);
+                }
+
+                // Limbs
+                const armGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.9, 8);
+                const legGeo = new THREE.CylinderGeometry(0.15, 0.15, 1.0, 8);
+                
+                const armL = new THREE.Mesh(armGeo, shirtMat); armL.position.set(-0.6, 1.6, 0); group.add(armL);
+                const armR = new THREE.Mesh(armGeo, shirtMat); armR.position.set(0.6, 1.6, 0); group.add(armR);
+                const legL = new THREE.Mesh(legGeo, pantsMat); legL.position.set(-0.2, 0.5, 0); group.add(legL);
+                const legR = new THREE.Mesh(legGeo, pantsMat); legR.position.set(0.2, 0.5, 0); group.add(legR);
+
+                return { group, armL, armR, legL, legR };
+            }
+
+            // Create Player
+            const pData = buildCharacter(0xd4d4d8, 0x3f3f46, false); // Grey coat detective
+            playerGroup = pData.group;
+            playerArmL = pData.armL; playerArmR = pData.armR; playerLegL = pData.legL; playerLegR = pData.legR;
+            playerGroup.position.set(0, 0, 10);
+            scene.add(playerGroup);
+
+            // Create Chief
+            const cData = buildCharacter(0x1e40af, 0x0f172a, true);
+            const chief = cData.group;
+            chief.position.set(0, 0, -5);
+            scene.add(chief);
+            interactables.push({ mesh: chief, type: 'chief', distance: 3 });
+
+            // Create Terminals
+            const createTerminal = (color, x, z, type, label) => {
+                const group = new THREE.Group();
+                // Desk
+                const deskMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.5, roughness: 0.2 });
+                const top = new THREE.Mesh(new THREE.BoxGeometry(3, 0.2, 2), deskMat); top.position.y = 1; group.add(top);
+                const legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1, 1.8), deskMat); legL.position.set(-1.3, 0.5, 0); group.add(legL);
+                const legR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1, 1.8), deskMat); legR.position.set(1.3, 0.5, 0); group.add(legR);
+                
+                // Monitor
+                const mMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+                const screenMat = new THREE.MeshBasicMaterial({ color: color }); // Glowing screen
+                const monitor = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1, 0.2), mMat); monitor.position.set(0, 1.7, -0.5);
+                monitor.rotation.x = Math.PI * -0.1; group.add(monitor);
+                const screen = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.8), screenMat); screen.position.set(0, 1.7, -0.39);
+                screen.rotation.x = Math.PI * -0.1; group.add(screen);
+
+                // Add Point Light to glow
+                const glow = new THREE.PointLight(color, 1, 5); glow.position.set(0, 2, 0); group.add(glow);
+
+                group.position.set(x, 0, z);
+                scene.add(group);
+                interactables.push({ mesh: group, type: type, distance: 4 });
+            };
+
+            createTerminal(0x3b82f6, -15, -10, 'terminal_random', 'Random'); // Blue
+            createTerminal(0x10b981, 15, -10, 'terminal_advanced', 'Advanced'); // Green
+            createTerminal(0xef4444, -15, 10, 'terminal_bias', 'Bias'); // Red
+            createTerminal(0xf59e0b, 15, 10, 'terminal_final', 'Mainframe'); // Gold (Final)
+
+            // Guiding Marker (Floating Yellow Diamond)
+            const markerGeo = new THREE.OctahedronGeometry(0.6, 0);
+            const markerMat = new THREE.MeshBasicMaterial({ color: 0xffd700, wireframe: false });
+            window.activeMarker = new THREE.Mesh(markerGeo, markerMat);
+            window.activeMarker.visible = false;
+            scene.add(window.activeMarker);
+
+            // Generate Living Population (Wandering Citizens)
+            window.citizens = [];
+            const citizenGroup = new THREE.Group();
+            scene.add(citizenGroup);
+            for(let i = 0; i < 40; i++) {
+                let colorShirt = Math.random() * 0xffffff;
+                let colorPants = Math.random() * 0xffffff;
+                let cData = buildCharacter(colorShirt, colorPants, false);
+                
+                // Spawn randomly around the map
+                cData.group.position.set((Math.random() - 0.5) * 120, 0, (Math.random() - 0.5) * 120);
+                cData.group.rotation.y = Math.random() * Math.PI * 2;
+                
+                citizenGroup.add(cData.group);
+                window.citizens.push({ 
+                    data: cData, 
+                    speed: 2 + Math.random() * 2, 
+                    turnRate: (Math.random() - 0.5) * 0.02,
+                    walkTime: Math.random() * 10
+                });
+            }
+
+            // Input handling
+            document.addEventListener('keydown', e => { if (keys.hasOwnProperty(e.code)) keys[e.code] = true; });
+            document.addEventListener('keyup', e => { if (keys.hasOwnProperty(e.code)) keys[e.code] = false; });
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            animate();
+        }
+
+        function applyCaseTheme(index) {
+            if (!window.envRefs.floorMat) return;
+            
+            if (index === 0) { 
+                scene.background.setHex(0x0f172a); scene.fog.color.setHex(0x0f172a);
+                window.envRefs.floorMat.color.setHex(0x8899aa); window.envRefs.particlesMat.color.setHex(0xbae6fd);
+            } else if (index === 1) { 
+                scene.background.setHex(0x1a0f00); scene.fog.color.setHex(0x1a0f00);
+                window.envRefs.floorMat.color.setHex(0xbaa575); window.envRefs.particlesMat.color.setHex(0xfbbf24); 
+            } else if (index === 2) { 
+                scene.background.setHex(0x021c1e); scene.fog.color.setHex(0x021c1e);
+                window.envRefs.floorMat.color.setHex(0x75baab); window.envRefs.particlesMat.color.setHex(0xf472b6);
+            }
+
+            window.envRefs.case1Props.visible = (index === 0);
+            window.envRefs.case2Props.visible = (index === 1);
+            window.envRefs.case3Props.visible = (index === 2);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+
+            // Animate Particles
+            if(window.dustParticles) {
+                const positions = window.dustParticles.geometry.attributes.position.array;
+                for(let i = 1; i < positions.length; i+=3) {
+                    positions[i] += Math.sin(Date.now() * 0.001 + i) * 0.01; // gentle float y
+                }
+                window.dustParticles.geometry.attributes.position.needsUpdate = true;
+            }
+
+            // Animate Guiding Marker
+            if(window.activeMarker && window.activeMarker.visible) {
+                window.activeMarker.rotation.y += dt * 2;
+                window.activeMarker.position.y = 4.5 + Math.sin(Date.now() * 0.004) * 0.5;
+            }
+
+            // Animate Living Population
+            if (window.citizens) {
+                window.citizens.forEach(c => {
+                    c.data.group.rotation.y += c.turnRate;
+                    c.data.group.position.x += Math.sin(c.data.group.rotation.y) * c.speed * dt;
+                    c.data.group.position.z += Math.cos(c.data.group.rotation.y) * c.speed * dt;
+                    
+                    // Turn around if they wander too far
+                    if(Math.abs(c.data.group.position.x) > 60 || Math.abs(c.data.group.position.z) > 60) {
+                        c.data.group.rotation.y += Math.PI; 
+                    }
+
+                    // Walk cycle
+                    c.walkTime += dt * 10;
+                    c.data.legL.rotation.x = Math.sin(c.walkTime) * 0.5;
+                    c.data.legR.rotation.x = Math.sin(c.walkTime + Math.PI) * 0.5;
+                    c.data.armL.rotation.x = Math.sin(c.walkTime + Math.PI) * 0.5;
+                    c.data.armR.rotation.x = Math.sin(c.walkTime) * 0.5;
+                });
+            }
+
+            if (GAME.playing && GAME.canMove && playerGroup) {
+                const speed = 10;
+                let moveX = 0, moveZ = 0;
+                
+                if (keys.w || keys.ArrowUp) moveZ -= 1;
+                if (keys.s || keys.ArrowDown) moveZ += 1;
+                if (keys.a || keys.ArrowLeft) moveX -= 1;
+                if (keys.d || keys.ArrowRight) moveX += 1;
+
+                if (moveX !== 0 || moveZ !== 0) {
+                    // Normalize
+                    const len = Math.sqrt(moveX*moveX + moveZ*moveZ);
+                    moveX /= len; moveZ /= len;
+                    
+                    playerGroup.position.x += moveX * speed * dt;
+                    playerGroup.position.z += moveZ * speed * dt;
+                    
+                    // Rotate player to face movement direction
+                    playerGroup.rotation.y = Math.atan2(moveX, moveZ);
+
+                    // Walk cycle animation
+                    walkTime += dt * 15;
+                    playerLegL.rotation.x = Math.sin(walkTime) * 0.5;
+                    playerLegR.rotation.x = Math.sin(walkTime + Math.PI) * 0.5;
+                    playerArmL.rotation.x = Math.sin(walkTime + Math.PI) * 0.5;
+                    playerArmR.rotation.x = Math.sin(walkTime) * 0.5;
+                } else {
+                    // Reset limbs
+                    playerLegL.rotation.x = 0; playerLegR.rotation.x = 0;
+                    playerArmL.rotation.x = 0; playerArmR.rotation.x = 0;
+                    walkTime = 0;
+                }
+
+                // Camera follows player
+                camera.position.x = playerGroup.position.x;
+                camera.position.z = playerGroup.position.z + 15;
+                camera.position.y = 12;
+                camera.lookAt(playerGroup.position);
+
+                // Check interactions
+                activeInteractable = null;
+                let minDs = Infinity;
+                for (let obj of interactables) {
+                    let d = playerGroup.position.distanceTo(obj.mesh.position);
+                    if (d < obj.distance && d < minDs) {
+                        minDs = d;
+                        activeInteractable = obj;
+                    }
+                }
+
+                if (activeInteractable) UI.prompt.classList.remove('hidden');
+                else UI.prompt.classList.add('hidden');
+            }
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>

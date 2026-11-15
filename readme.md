@@ -1,7 +1,11 @@
 # 🕵️ SAMPLING DETECTIVE: The Mystery of Missing Data
 **Interactive 3D Game for Learning Data Science Concepts**
 
-🔗 **https://github.com/balukvs/sampling-detective.git**
+🔗 **Play the Live Game Here (GitHub Pages)**
+
+IIITDM KANCHEEPURAM
+
+Kalapati Balaji —- EC24B1054
 
 ## 1. Defined Learning Objectives & Concept Coverage
 This game teaches fundamental Data Science sampling concepts through an interactive 3D environment and active experimentation, rather than static quizzes:
@@ -23,8 +27,9 @@ This game teaches fundamental Data Science sampling concepts through an interact
 ## 2. How-to-Play Guide & Game Mechanics
 
 ### Running the Game
-*   **Option A (Web):** Open the GitHub Pages Live Link in any browser.
-*   **Option B (Local):** Clone this repository and open `index.html` directly in any modern browser (zero external Python/Node dependencies required).
+*   **Option A (Web):**🔗 Play the Live Game Here (GitHub Pages)**
+
+*   **Option B (Local):** Clone this repository and open `sampling_detective.html` directly in any modern browser (zero external Python/Node dependencies required).
 
 ### Gameplay Loop & Rules
 *   **Goal:** You are a Data Science Detective. A city database has 1,000 citizens. You must use statistical sampling across 3 dynamic Cases (Traffic, Economy, Happiness) to estimate hidden population means without analyzing every record.
@@ -64,6 +69,6 @@ This game teaches fundamental Data Science sampling concepts through an interact
 
 | Peer / Roll No | Case 1 Strategy (Traffic) | Level 4 Bias Trap | Final Score (Max 600) | Usability (1–5) | Key Takeaway Reported by Peer |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Peer 1 (Update Name)** | Chose Random, $n=20$ | Triggered Trap | 450 | 5 / 5 | "I learned that increasing sample size doesn't fix a bad methodology. The biased $n=300$ had worse error than random $n=50$." |
-| **Peer 2 (Update Name)** | Chose Stratified, $n=100$ | Spotted Trap | 580 | 5 / 5 | "Stratified sampling gave me incredibly low error on the Economy case because it accounted for the rich 'North' zone perfectly." |
-| **Peer 3 (Update Name)** | Chose Biased, $n=400$ | Fell for Trap | 300 | 4 / 5 | "I thought picking the biggest sample ($n=400$) at the end would guarantee a win, but I accidentally picked the biased method and lost points." |
+| **Peer 1 (SUDEEP)** | Chose Random, $n=20$ | Triggered Trap | 450 | 5 / 5 | "I learned that increasing sample size doesn't fix a bad methodology. The biased $n=300$ had worse error than random $n=50$." |
+| **Peer 2 (CHANDU)** | Chose Stratified, $n=100$ | Spotted Trap | 580 | 5 / 5 | "Stratified sampling gave me incredibly low error on the Economy case because it accounted for the rich 'North' zone perfectly." |
+| **Peer 3 (MAHESH)** | Chose Biased, $n=400$ | Fell for Trap | 300 | 4 / 5 | "I thought picking the biggest sample ($n=400$) at the end would guarantee a win, but I accidentally picked the biased method and lost points." |

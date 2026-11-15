@@ -1,6 +1,6 @@
 # 🕵️ SAMPLING DETECTIVE: The Mystery of Missing Data
 
-**Part B: Interactive 3D Game for Learning Data Science Concepts**
+**Interactive 3D Game for Learning Data Science Concepts**
 
 🔗 [**Play the Live Game Here (GitHub Pages)**](https://balukvs.github.io/sampling-detective/)
 
